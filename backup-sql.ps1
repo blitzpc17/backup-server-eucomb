@@ -1,6 +1,6 @@
-# Script completo de configuracion de backup para Windows Server 2022 con sistema de logging y NAS
+# Script completo de configuración de backup para Windows Server 2022 con sistema de logging y NAS
 
-# Funcion para escribir logs
+# Función para escribir logs
 function Write-Log {
     param(
         [string]$Message,
@@ -24,7 +24,7 @@ function Write-Log {
     }
 }
 
-# Funcion para configurar backup en NAS
+# Función para configurar backup en NAS usando credenciales existentes
 function Configure-NASBackup {
     param(
         [string]$NASPath,
@@ -33,7 +33,7 @@ function Configure-NASBackup {
         [string]$BackupTime = "02:00"
     )
 
-    Write-Log "=== CONFIGURACIoN BACKUP EN NAS ===" "INFO"
+    Write-Log "=== CONFIGURACIÓN BACKUP EN NAS ===" "INFO"
 
     # 1. Verificar formato de ruta NAS
     if ($NASPath -notlike "\\*") {
@@ -41,25 +41,60 @@ function Configure-NASBackup {
         return $false
     }
 
-    # 2. Crear credenciales seguras
+    # 2. Usar las credenciales YA DEFINIDAS en el script
+    Write-Log "Usando credenciales existentes del script para: $Username" "INFO"
+    
+    # Verificar acceso al NAS con las credenciales proporcionadas
+    Write-Log "Verificando acceso al NAS con credenciales proporcionadas..." "INFO"
+    
     try {
+        # Crear objeto de credenciales con las credenciales YA EXISTENTES
         $securePassword = ConvertTo-SecureString $Password -AsPlainText -Force
         $credential = New-Object System.Management.Automation.PSCredential ($Username, $securePassword)
-        Write-Log "Credenciales creadas para: $Username" "SUCCESS"
+        
+        # Intentar mapeo temporal para verificar credenciales
+        $tempDrive = "Z:"
+        $mapped = $false
+        
+        try {
+            # Mapear unidad temporal para verificar credenciales
+            New-PSDrive -Name $tempDrive -PSProvider FileSystem -Root $NASPath -Credential $credential -Scope Global
+            $mapped = $true
+            Write-Log "Credenciales verificadas exitosamente para: $Username" "SUCCESS"
+        } catch {
+            Write-Log "Error verificando credenciales: $($_.Exception.Message)" "ERROR"
+            return $false
+        } finally {
+            # Desmapear unidad temporal
+            if ($mapped) {
+                Remove-PSDrive -Name $tempDrive -Force -ErrorAction SilentlyContinue
+            }
+        }
+        
     } catch {
-        Write-Log "Error creando credenciales: $($_.Exception.Message)" "ERROR"
+        Write-Log "Error creando objeto de credenciales: $($_.Exception.Message)" "ERROR"
         return $false
     }
 
     # 3. Verificar permisos de escritura en NAS
     Write-Log "Verificando permisos de escritura en NAS..." "INFO"
-    $testFile = Join-Path $NASPath "test_permissions.txt"
     try {
+        # Mapear temporalmente para prueba de escritura
+        $testDrive = "Y:"
+        New-PSDrive -Name $testDrive -PSProvider FileSystem -Root $NASPath -Credential $credential -Scope Global
+        
+        $testFile = "${testDrive}:\test_permissions.txt"
         "Test de permisos $(Get-Date)" | Out-File -FilePath $testFile -Encoding UTF8 -Force
         Remove-Item -Path $testFile -Force
+        
+        # Desmapear
+        Remove-PSDrive -Name $testDrive -Force
+        
         Write-Log "Permisos de escritura OK en NAS" "SUCCESS"
     } catch {
         Write-Log "Sin permisos de escritura en NAS: $($_.Exception.Message)" "ERROR"
+        # Intentar desmapear por si acaso
+        try { Remove-PSDrive -Name $testDrive -Force -ErrorAction SilentlyContinue } catch {}
         return $false
     }
 
@@ -77,7 +112,8 @@ function Configure-NASBackup {
         Add-WBVolume -Policy $policy -Volume (Get-WBVolume -VolumePath "C:")
         Add-WBSystemState -Policy $policy
         
-        # Configurar NAS como destino
+        # Configurar NAS como destino CON las credenciales YA EXISTENTES
+        Write-Log "Configurando NAS como destino de backup..." "INFO"
         $backupLocation = New-WBBackupTarget -NetworkPath $NASPath -Credential $credential
         Add-WBBackupTarget -Policy $policy -Target $backupLocation
         
@@ -87,7 +123,8 @@ function Configure-NASBackup {
         
         Write-Log "BACKUP NAS CONFIGURADO EXITOSAMENTE" "SUCCESS"
         Write-Log "Destino: $NASPath" "INFO"
-        Write-Log "Horario: $BackupTime 2:00 AM" "INFO"
+        Write-Log "Horario: $BackupTime (2:00 AM)" "INFO"
+        Write-Log "Usuario: $Username" "INFO"
         Write-Log "Backup completo del sistema" "INFO"
         
         return $true
@@ -99,10 +136,10 @@ function Configure-NASBackup {
 }
 
 # Iniciar log
-Write-Log "=== INICIO CONFIGURACIoN WINDOWS SERVER BACKUP CON NAS ===" "INFO"
+Write-Log "=== INICIO CONFIGURACIÓN WINDOWS SERVER BACKUP CON NAS ===" "INFO"
 
 # 1. Verificar e instalar Windows Server Backup
-Write-Log "Verificando instalacion de Windows Server Backup..." "INFO"
+Write-Log "Verificando instalación de Windows Server Backup..." "INFO"
 $feature = Get-WindowsFeature -Name Windows-Server-Backup
 
 if ($feature.InstallState -ne "Installed") {
@@ -118,12 +155,12 @@ if ($feature.InstallState -ne "Installed") {
     Write-Log "Windows Server Backup ya está instalado" "SUCCESS"
 }
 
-# 2. Importar el modulo
+# 2. Importar el módulo
 try {
     Import-Module -Name WindowsServerBackup -Force
-    Write-Log "Modulo WindowsServerBackup cargado exitosamente" "SUCCESS"
+    Write-Log "Módulo WindowsServerBackup cargado exitosamente" "SUCCESS"
 } catch {
-    Write-Log "No se pudo cargar el modulo WindowsServerBackup: $($_.Exception.Message)" "ERROR"
+    Write-Log "No se pudo cargar el módulo WindowsServerBackup: $($_.Exception.Message)" "ERROR"
     exit 1
 }
 
@@ -151,22 +188,24 @@ foreach ($disk in $disks) {
     Write-Log "Disco $($disk.Number): $([math]::Round($disk.Size/1GB,2)) GB - $($disk.PartitionStyle)" "INFO"
 }
 
-# 5. CONFIGURACIoN PRINCIPAL - ELEGIR ENTRE NAS O DISCO LOCAL
-Write-Log "=== SELECCIoN DE DESTINO DE BACKUP ===" "INFO"
-Write-Log "1. Backup en NAS (Recomendado para produccion)" "INFO"
+# 5. CONFIGURACIÓN PRINCIPAL - ELEGIR ENTRE NAS O DISCO LOCAL
+Write-Log "=== SELECCIÓN DE DESTINO DE BACKUP ===" "INFO"
+Write-Log "1. Backup en NAS (Recomendado para producción)" "INFO"
 Write-Log "2. Backup en disco local (Para testing/emergencias)" "INFO"
 
-# Configuracion del NAS - MODIFICA ESTOS VALORES CON TUS DATOS
+# Configuración del NAS - USANDO CREDENCIALES YA DEFINIDAS
 $nasConfig = @{
-    NASPath    = "\\192.168.10.25\backups_servidor"  # CAMBIA: IP/ruta de tu NAS
-    Username   = "Chapulco"                             # CAMBIA: Usuario del NAS
-    Password   = 'cIntel$2024$Eucomb'                       # CAMBIA: Password del NAS
+    NASPath    = "\\192.168.10.25\backups_servidor"  # Ruta de tu NAS
+    Username   = "Chapulco"                          # Usuario del NAS (YA DEFINIDO)
+    Password   = 'cIntel$2024$Eucomb'                # Password del NAS (YA DEFINIDO)
     BackupTime = "02:00"                             # Hora de backup (2:00 AM)
 }
 
-Write-Log "Intentando configuracion en NAS: $($nasConfig.NASPath)" "INFO"
+Write-Log "Intentando configuración en NAS: $($nasConfig.NASPath)" "INFO"
+Write-Log "Usuario: $($nasConfig.Username)" "INFO"
+Write-Log "Usando credenciales YA DEFINIDAS en el script" "INFO"
 
-# Intentar configuracion en NAS primero
+# Intentar configuración en NAS primero
 $nasSuccess = Configure-NASBackup @nasConfig
 
 if (-not $nasSuccess) {
@@ -213,20 +252,20 @@ if (-not $nasSuccess) {
         Set-WBPolicy -Policy $policy -Force
         Write-Log "Política de backup aplicada exitosamente" "SUCCESS"
         
-        Write-Log "Configuracion de backup completada exitosamente EN DISCO LOCAL" "SUCCESS"
+        Write-Log "Configuración de backup completada exitosamente EN DISCO LOCAL" "SUCCESS"
         Write-Log "Frecuencia: Diariamente" "INFO"
         Write-Log "Hora: 02:00 (2:00 AM)" "INFO"
         Write-Log "Destino: Disco $($backupDisk.DiskNumber)" "INFO"
         Write-Log "Incluye: Volumen C: + Estado del sistema" "INFO"
 
     } catch {
-        Write-Log "Error en la configuracion del backup local: $($_.Exception.Message)" "ERROR"
+        Write-Log "Error en la configuración del backup local: $($_.Exception.Message)" "ERROR"
         Write-Log "Detalles del error: $($_.Exception.StackTrace)" "ERROR"
     }
 }
 
-# 6. Mostrar informacion final
-Write-Log "Obteniendo informacion final de la configuracion..." "INFO"
+# 6. Mostrar información final
+Write-Log "Obteniendo información final de la configuración..." "INFO"
 try {
     $currentPolicy = Get-WBPolicy
     Write-Log "Política activa configurada: $($currentPolicy.PolicyName)" "SUCCESS"
@@ -242,8 +281,8 @@ try {
     Write-Log "No se pudo recuperar la política actual" "WARNING"
 }
 
-# 7. Verificacion de la programacion
-Write-Log "=== VERIFICACIoN DE PROGRAMACIoN ===" "INFO"
+# 7. Verificación de la programación
+Write-Log "=== VERIFICACIÓN DE PROGRAMACIÓN ===" "INFO"
 try {
     $scheduledTasks = Get-ScheduledTask -TaskName "*Microsoft*Windows*Backup*" | Where-Object {$_.State -eq "Ready"}
     if ($scheduledTasks) {
@@ -259,6 +298,6 @@ try {
 }
 
 # Finalizar log
-Write-Log "=== FIN CONFIGURACIoN WINDOWS SERVER BACKUP ===" "INFO"
+Write-Log "=== FIN CONFIGURACIÓN WINDOWS SERVER BACKUP ===" "INFO"
 Write-Log "Log guardado en: C:\Windows\Logs\Backup-Setup.log" "INFO"
-Write-Log "RECUERDA: Modifica las credenciales del NAS en el script con tus datos reales" "WARNING"
+Write-Log "Configuración completada usando credenciales YA DEFINIDAS en el script" "SUCCESS"
