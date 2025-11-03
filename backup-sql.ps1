@@ -1,6 +1,6 @@
-# Script completo de configuración de backup para Windows Server 2022 con sistema de logging y NAS
+# Script completo de configuracion de backup para Windows Server 2022 con sistema de logging y NAS
 
-# Función para escribir logs
+# Funcion para escribir logs
 function Write-Log {
     param(
         [string]$Message,
@@ -24,7 +24,7 @@ function Write-Log {
     }
 }
 
-# Función para configurar backup en NAS usando credenciales existentes
+# Funcion para configurar backup en NAS usando credenciales existentes
 function Configure-NASBackup {
     param(
         [string]$NASPath,
@@ -33,7 +33,7 @@ function Configure-NASBackup {
         [string]$BackupTime = "02:00"
     )
 
-    Write-Log "=== CONFIGURACIÓN BACKUP EN NAS ===" "INFO"
+    Write-Log "=== CONFIGURACIoN BACKUP EN NAS ===" "INFO"
 
     # 1. Verificar formato de ruta NAS
     if ($NASPath -notlike "\\*") {
@@ -136,10 +136,10 @@ function Configure-NASBackup {
 }
 
 # Iniciar log
-Write-Log "=== INICIO CONFIGURACIÓN WINDOWS SERVER BACKUP CON NAS ===" "INFO"
+Write-Log "=== INICIO CONFIGURACIoN WINDOWS SERVER BACKUP CON NAS ===" "INFO"
 
 # 1. Verificar e instalar Windows Server Backup
-Write-Log "Verificando instalación de Windows Server Backup..." "INFO"
+Write-Log "Verificando instalacion de Windows Server Backup..." "INFO"
 $feature = Get-WindowsFeature -Name Windows-Server-Backup
 
 if ($feature.InstallState -ne "Installed") {
@@ -155,12 +155,12 @@ if ($feature.InstallState -ne "Installed") {
     Write-Log "Windows Server Backup ya está instalado" "SUCCESS"
 }
 
-# 2. Importar el módulo
+# 2. Importar el modulo
 try {
     Import-Module -Name WindowsServerBackup -Force
-    Write-Log "Módulo WindowsServerBackup cargado exitosamente" "SUCCESS"
+    Write-Log "Modulo WindowsServerBackup cargado exitosamente" "SUCCESS"
 } catch {
-    Write-Log "No se pudo cargar el módulo WindowsServerBackup: $($_.Exception.Message)" "ERROR"
+    Write-Log "No se pudo cargar el modulo WindowsServerBackup: $($_.Exception.Message)" "ERROR"
     exit 1
 }
 
@@ -188,12 +188,12 @@ foreach ($disk in $disks) {
     Write-Log "Disco $($disk.Number): $([math]::Round($disk.Size/1GB,2)) GB - $($disk.PartitionStyle)" "INFO"
 }
 
-# 5. CONFIGURACIÓN PRINCIPAL - ELEGIR ENTRE NAS O DISCO LOCAL
-Write-Log "=== SELECCIÓN DE DESTINO DE BACKUP ===" "INFO"
-Write-Log "1. Backup en NAS (Recomendado para producción)" "INFO"
+# 5. CONFIGURACIoN PRINCIPAL - ELEGIR ENTRE NAS O DISCO LOCAL
+Write-Log "=== SELECCIoN DE DESTINO DE BACKUP ===" "INFO"
+Write-Log "1. Backup en NAS (Recomendado para produccion)" "INFO"
 Write-Log "2. Backup en disco local (Para testing/emergencias)" "INFO"
 
-# Configuración del NAS - USANDO CREDENCIALES YA DEFINIDAS
+# Configuracion del NAS - USANDO CREDENCIALES YA DEFINIDAS
 $nasConfig = @{
     NASPath    = "\\192.168.10.25\backups_servidor"  # Ruta de tu NAS
     Username   = "Chapulco"                          # Usuario del NAS (YA DEFINIDO)
@@ -201,11 +201,11 @@ $nasConfig = @{
     BackupTime = "02:00"                             # Hora de backup (2:00 AM)
 }
 
-Write-Log "Intentando configuración en NAS: $($nasConfig.NASPath)" "INFO"
+Write-Log "Intentando configuracion en NAS: $($nasConfig.NASPath)" "INFO"
 Write-Log "Usuario: $($nasConfig.Username)" "INFO"
 Write-Log "Usando credenciales YA DEFINIDAS en el script" "INFO"
 
-# Intentar configuración en NAS primero
+# Intentar configuracion en NAS primero
 $nasSuccess = Configure-NASBackup @nasConfig
 
 if (-not $nasSuccess) {
@@ -244,7 +244,7 @@ if (-not $nasSuccess) {
         Add-WBBackupTarget -Policy $policy -Target $backupLocation
         Write-Log "Destino de backup configurado en disco: $($backupDisk.DiskNumber)" "SUCCESS"
 
-        # Programar backup diario a las 02:00 (2:00 AM)
+        # Programar backup diario a las 02:00 2:00 AM
         Set-WBSchedule -Policy $policy -Schedule "02:00"
         Write-Log "Backup programado para ejecutarse diariamente a las 02:00" "SUCCESS"
 
@@ -252,20 +252,20 @@ if (-not $nasSuccess) {
         Set-WBPolicy -Policy $policy -Force
         Write-Log "Política de backup aplicada exitosamente" "SUCCESS"
         
-        Write-Log "Configuración de backup completada exitosamente EN DISCO LOCAL" "SUCCESS"
+        Write-Log "Configuracion de backup completada exitosamente EN DISCO LOCAL" "SUCCESS"
         Write-Log "Frecuencia: Diariamente" "INFO"
-        Write-Log "Hora: 02:00 (2:00 AM)" "INFO"
+        Write-Log "Hora: 02:00 2:00 AM" "INFO"
         Write-Log "Destino: Disco $($backupDisk.DiskNumber)" "INFO"
         Write-Log "Incluye: Volumen C: + Estado del sistema" "INFO"
 
     } catch {
-        Write-Log "Error en la configuración del backup local: $($_.Exception.Message)" "ERROR"
+        Write-Log "Error en la configuracion del backup local: $($_.Exception.Message)" "ERROR"
         Write-Log "Detalles del error: $($_.Exception.StackTrace)" "ERROR"
     }
 }
 
-# 6. Mostrar información final
-Write-Log "Obteniendo información final de la configuración..." "INFO"
+# 6. Mostrar informacion final
+Write-Log "Obteniendo informacion final de la configuracion..." "INFO"
 try {
     $currentPolicy = Get-WBPolicy
     Write-Log "Política activa configurada: $($currentPolicy.PolicyName)" "SUCCESS"
@@ -281,8 +281,8 @@ try {
     Write-Log "No se pudo recuperar la política actual" "WARNING"
 }
 
-# 7. Verificación de la programación
-Write-Log "=== VERIFICACIÓN DE PROGRAMACIÓN ===" "INFO"
+# 7. Verificacion de la programacion
+Write-Log "=== VERIFICACIoN DE PROGRAMACIoN ===" "INFO"
 try {
     $scheduledTasks = Get-ScheduledTask -TaskName "*Microsoft*Windows*Backup*" | Where-Object {$_.State -eq "Ready"}
     if ($scheduledTasks) {
@@ -298,6 +298,6 @@ try {
 }
 
 # Finalizar log
-Write-Log "=== FIN CONFIGURACIÓN WINDOWS SERVER BACKUP ===" "INFO"
+Write-Log "=== FIN CONFIGURACIoN WINDOWS SERVER BACKUP ===" "INFO"
 Write-Log "Log guardado en: C:\Windows\Logs\Backup-Setup.log" "INFO"
-Write-Log "Configuración completada usando credenciales YA DEFINIDAS en el script" "SUCCESS"
+Write-Log "Configuracion completada usando credenciales YA DEFINIDAS en el script" "SUCCESS"
